@@ -1,0 +1,4 @@
+/.vscode/
+/env/
+/model/dataset/
+.ipynb_checkpoints
