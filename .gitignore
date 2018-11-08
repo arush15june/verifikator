@@ -2,3 +2,5 @@
 /env/
 /model/dataset/
 .ipynb_checkpoints
+
+*.pyc
