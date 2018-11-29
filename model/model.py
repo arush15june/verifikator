@@ -6,300 +6,139 @@
 
     08/11/2018
 
+    Reference
+        https://github.com/kevinzakka/one-shot-siamese
+
     TODO:
         - Better image loading
+        - Convert Signature Info to class
 """
+
 import os
 import random
 import numpy as np
 import pandas as pd
+
 from PIL import Image
 import PIL.ImageOps    
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from torch.autograd import Variable
 from torch.utils.data import Dataset, DataLoader
+
 import torchvision
 import torchvision.utils
 import torchvision.transforms as transforms
 
 class Config():
-
     def __init__(self, images_dir, batch_size, epochs, *args, **kwargs):
         self.images_dir = images_dir
         self.train_batch_size = batch_size
         self.train_number_epochs = epochs
 
-class SignatureDataset(Dataset):
-    """ 
-    :param imageFolderDataset torchvision.datasets.ImageLoader: Loaded image folder, image information
-    :param transform: transforms for the image
-    :param should_invert: invert tbe image
-
-    Load the dataset from the 
-        <self.imageFolderDataset: torchvision.datasets.ImageLoader>
-        DEFAULT DATASET FOLDER: ./dataset/
-
-    - Dataset Format
-        File Name: `NFI-XXXYYZZZ`
-
-        `XXX` - ID number of a person who has done the signature. 
-		`YY` - Image smaple number.
-		`ZZZ` - ID number of person whose signature is in photo.    
+class SiameseNet(nn.Module):
     """
+    A Convolutional Siamese Network for One-Shot Learning [1].
 
-    # forged in class 0 loaded by datasets.ImageFolder
-    FORGED = 0
-    # genuine is class 1 loaded by datasets.ImageFolder
-    GENUINE = 1
-    
-    def __init__(self, imageFolderDataset, transform=None, should_invert=True):
-        self.imageFolderDataset = imageFolderDataset    
-        self.transform = transform
-        self.should_invert = should_invert
+    Siamese networts learn image representations via a supervised metric-based
+    approach. Once tuned, their learned features can be leveraged for one-shot
+    learning without any retraining.
 
-    @property
-    def ids(self):
-        img_files = self.imageFolderDataset.imgs
-        sigs_info = []
-        for sig in img_files:
-            file_name = os.path.basename(sig[0])
-            sig_id, _, _ = self.signatureInfo(file_name)
-            sigs_info.append(sig_id)
-                
-        return set(sigs_info)
-
-    @staticmethod
-    def randomSelect(CHOICE_1, CHOICE_2):
-        return np.where(np.random.random() > 0.5, CHOICE_1, CHOICE_2)
-
-    def getRandomId(self):
-        return random.choice(self.ids)
-        
-    def getRandomImage(self):
-        """
-            Load a random image from dataset
-        """
-        return random.choice(self.imageFolderDataset.imgs)
-
-    def getRandomLabel(self):
-        """ 
-            Generate random label for selecting a second image
-        """
-        return self.randomSelect(1, 0)
-        
-    def getImageSameClass(self):
-        """
-            Get image tuples of the same class
-            - Get a random id, <ID>
-            - Load genuine image of the <ID>
-            - Load another genuine image of the <ID>
-
-            ex. 
-                ID := 001
-                image1 := 'NFI-00101001.png'
-                image2 := 'NFI-00102001.png'
-        """
-        sig_id = self.getRandomId()
-        print(sig_id)
-    
-    def getImageDifferentClass(self):
-        """
-            Get image tuples of different class
-            - Get a random id, <ID>
-            - Load genuine image of the <ID>
-            - Load forged image of the <ID>
-
-            ex. 
-                ID := 001
-                image1 := 'NFI-00101001.png'
-                image2 := 'NFI-00101002.png'
-        """
-        pass
-
-    @staticmethod
-    def signatureInfo(filename):
-        """
-            signature - signature of this person
-            sample - Image Sample No
-            done_by - Signature done by
-        """
-        signature = filename[4:7]
-        sample = filename[7:9]
-        done_by = filename[9:12]
-
-        return signature, sample, done_by    
-    
-    @staticmethod
-    def getImage(file_name):
-        """
-            Load file as PIL.Image
-        """
-        return Image.open(file_name).convert("L")
-
-    @staticmethod
-    def generateLabel(label):
-        """
-            Convert similarity label to PyTorch Tensor
-        """
-        return torch.from_numpy(np.array([int(label)], dtype=np.float32))
-
-    def __getitem__(self, index):
-        """
-            Return 2 images and a label corresponding to if the images are the same or not
-
-            - Choose either to select a different image or same image
-                - Different Images
-                    - Randomly choose a genuine image of a random id
-                    - Randomly choose a forged image of the same id
-                - Same Images
-                    - Randomly choose a genuine image of a random id
-                    - Randomly choose another genuine image of the same id
-            - Apply Transforms
-            - Return 
-                - Image 1
-                - Image 2
-                - Similiarity Label
-        """
-        
-        """ 
-            we need to make sure approx 50% of images are in the same class
-        """
-        should_get_same_class = self.getRandomLabel()
-
-        if should_get_same_class:
-            img0_tuple, img1_tuple = self.getImageSameClass()
-        else:
-            img0_tuple, img1_tuple = self.getImageDifferentClass()
-
-        """
-        open images and convert to to grayscale 
-        """
-        img0 = self.getImage(img0_tuple[0])
-        img1 = self.getImage(img1_tuple[0])
-        
-        if self.should_invert:
-            img0 = PIL.ImageOps.invert(img0)
-            img1 = PIL.ImageOps.invert(img1)
-
-        if self.transform is not None:
-            img0 = self.transform(img0)
-            img1 = self.transform(img1)
-        
-        return img0, img1 , self.generateLabel(should_get_same_class)
-
-    def __len__(self):
-        return len(self.imageFolderDataset.imgs)
-
-class ContrastiveLoss(torch.nn.Module):
+    References
+    ----------
+    - Koch et al., https://www.cs.cmu.edu/~rsalakhu/papers/oneshot1.pdf
     """
-    Contrastive loss function.
-    Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
-    """
-
-    def __init__(self, margin=2.0):
-        super(ContrastiveLoss, self).__init__()
-        self.margin = margin
-
-    def forward(self, output1, output2, label):
-        euclidean_distance = F.pairwise_distance(output1, output2)
-        loss_contrastive = torch.mean((1-label) * torch.pow(euclidean_distance, 2) +
-                                      (label) * torch.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
-
-        return loss_contrastive
-
-class SiameseNetwork(nn.Module):
     def __init__(self):
-        super(SiameseNetwork, self).__init__()
-        self.cnn1 = nn.Sequential(
-            nn.ReflectionPad2d(1),
-            nn.Conv2d(3, 4, kernel_size=3),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(4),
-            
-            nn.ReflectionPad2d(1),
-            nn.Conv2d(4, 8, kernel_size=3),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(8),
+        super(SiameseNet, self).__init__()
 
+        self.conv1 = nn.Conv2d(1, 64, 10)
+        self.conv2 = nn.Conv2d(64, 128, 7)
+        self.conv3 = nn.Conv2d(128, 128, 4)
+        self.conv4 = nn.Conv2d(128, 256, 2)
+        self.fc1 = nn.Linear(3072, 4096)
+        self.fc2 = nn.Linear(4096, 1)
 
-            nn.ReflectionPad2d(1),
-            nn.Conv2d(8, 8, kernel_size=3),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(8),
+        # self.conv1_bn = nn.BatchNorm2d(64)
+        # self.conv2_bn = nn.BatchNorm2d(128)
+        # self.conv3_bn = nn.BatchNorm2d(128)
+        # self.conv4_bn = nn.BatchNorm2d(256)
 
-        )
+        # weight init
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal(m.weight, mode='fan_in')
+        # for m in self.modules():
+        #     if isinstance(m, nn.Conv2d):
+        #         nn.init.normal(m.weight, 0, 1e-2)
+        #         nn.init.normal(m.bias, 0.5, 1e-2)
+        #     elif isinstance(m, nn.Linear):
+        #         nn.init.normal(m.weight, 0, 2e-1)
+        #         nn.init.normal(m.weight, 0, 1e-2)
 
-        self.fc1 = nn.Sequential(
-            nn.Linear(8*130*150, 500),
-            nn.ReLU(inplace=True),
+    def sub_forward(self, x):
+        """
+        Forward pass the input image through 1 subnetwork.
 
-            nn.Linear(500, 500),
-            nn.ReLU(inplace=True),
+        Args
+        ----
+        - x: a Variable of size (B, C, H, W). Contains either the first or
+          second image pair across the input batch.
 
-            nn.Linear(500, 5)
-        )
+        Returns
+        -------
+        - out: a Variable of size (B, 4096). The hidden vector representation
+          of the input vector x.
+        """
+        # out = F.max_pool2d(self.conv1_bn(F.relu(self.conv1(x))), 2)
+        # out = F.max_pool2d(self.conv2_bn(F.relu(self.conv2(out))), 2)
+        # out = F.max_pool2d(self.conv3_bn(F.relu(self.conv3(out))), 2)
+        # out = self.conv4_bn(F.relu(self.conv4(out)))
+        out = F.relu(F.max_pool2d(self.conv1(x), 2))
+        out = F.relu(F.max_pool2d(self.conv2(out), 2))
+        out = F.relu(F.max_pool2d(self.conv3(out), 2))
+        out = F.relu(self.conv4(out))
 
-    def forward_once(self, x):
-        output = self.cnn1(x)
-        output = output.view(output.size()[0], -1)
-        output = self.fc1(output)
-        return output
+        out = out.view(out.shape[0], -1)
+        out = F.sigmoid(self.fc1(out))
+        return out
 
-    def forward(self, input1, input2):
-        output1 = self.forward_once(input1)
-        output2 = self.forward_once(input2)
-        return output1, output2
+    def forward(self, x1, x2):
+        """
+        Forward pass the input image pairs through both subtwins. An image
+        pair is composed of a left tensor x1 and a right tensor x2.
 
-class SiameseNetworkDataset(Dataset):
-    """ 
-    Get the dataset for the network, the aim is to get image pairs randomly where 50% 
-    image pairs belong to the same class and 50% to a different class
-    """
-    def __init__(self, imageFolderDataset, transform=None, should_invert=True):
-        self.imageFolderDataset = imageFolderDataset    
-        self.transform = transform
-        self.should_invert = should_invert
-        
-    def getRandomImage(self):
-        return random.choice(self.imageFolderDataset.imgs)
+        Concretely, we compute the component-wise L1 distance of the hidden
+        representations generated by each subnetwork, and feed the difference
+        to a final fc-layer followed by a sigmoid activation function to
+        generate a similarity score in the range [0, 1] for both embeddings.
 
-    def getRandomLabel(self):
-        return np.where(np.random.random() > 0.5, 1, 0)
-    
-    @staticmethod
-    def getImage(file_name):
-        return Image.open(file_name)#.convert("L")
+        Args
+        ----
+        - x1: a Variable of size (B, C, H, W). The left image pairs along the
+          batch dimension.
+        - x2: a Variable of size (B, C, H, W). The right image pairs along the
+          batch dimension.
 
-    @staticmethod
-    def generateLabel(label):
-        return torch.from_numpy(np.array([int(label)], dtype=np.float32))
+        Returns
+        -------
+        - probas: a Variable of size (B, 1). A probability scalar indicating
+          whether the left and right input pairs, along the batch dimension,
+          correspond to the same class. We expect the network to spit out
+          values near 1 when they belong to the same class, and 0 otherwise.
+        """
+        # encode image pairs
+        h1 = self.sub_forward(x1)
+        h2 = self.sub_forward(x2)
 
-    def __getitem__(self, index):
-        img0_tuple = self.getRandomImage()
+        # compute l1 distance
+        diff = torch.abs(h1 - h2)
 
-        """ we need to make sure approx 50% of images are in the same class """
-        should_get_same_class = self.getRandomLabel()
+        # score the similarity between the 2 encodings
+        scores = self.fc2(diff)
 
-        if should_get_same_class:
-            img1_tuple = img0_tuple
-        else:
-            img1_tuple = self.getRandomImage()
-
-        """ open images and convert to to grayscale """
-        img0 = self.getImage(img0_tuple[0])
-        img1 = self.getImage(img1_tuple[0])
-        
-        if self.should_invert:
-            img0 = PIL.ImageOps.invert(img0)
-            img1 = PIL.ImageOps.invert(img1)
-
-        if self.transform is not None:
-            img0 = self.transform(img0)
-            img1 = self.transform(img1)
-        
-        return img0, img1 , self.generateLabel(should_get_same_class)
-
-    def __len__(self):
-        return len(self.imageFolderDataset.imgs)
+        # return scores (without sigmoid) and use bce_with_logits
+        # for increased numerical stability
+        return scores
