@@ -1,6 +1,9 @@
 /.vscode/
 /env/
 /model/dataset/
+/model/ckpt/
+/model/logs/
+/model/plots/
 .ipynb_checkpoints
 
 *.pyc
