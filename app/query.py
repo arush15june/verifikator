@@ -1,10 +1,10 @@
 from PIL import Image
 
 import torch
+import torch.nn.functional as F
 from torch.autograd import Variable
 from torchvision import transforms
 from model import SiameseNet
-import torch.nn.functional as F
 
 class QueryModel():
     """

@@ -19,7 +19,6 @@ import time
 from random import Random
 import Augmentor
 
-from utils import pickle_load
 import torchvision.datasets as dset
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
@@ -374,47 +373,3 @@ class SignatureDataset(Dataset, SignatureTools):
         image2 = transforms.ToTensor()(image2)
         y = torch.from_numpy(np.array([label], dtype=np.float32))
         return (image1, image2, y)
-
-class SignatureTest(Dataset, SignatureTools):
-    def __init__(self, dataset, trials, way, seed=0):
-        super(SignatureTest, self).__init__()
-        self.dataset = dataset
-        self.trials = trials
-        self.way = way
-        self.transform = transforms.ToTensor()
-        self.seed = seed
-
-    def __len__(self):
-        return (self.trials * self.way)
-
-    def __getitem__(self, index):
-        self.rng = Random(self.seed + index)
-
-        idx = index % self.way
-        label = None
-        # generate image pair from same class
-        if idx == 0:
-            self.img1 = self.rng.choice(self.genuine)
-            image1_filename = os.path.basename(self.img1[1])
-            image1_sig_meta = SigInfo(image1_filename)
-            sigs_genuine = self.signatures_genuine(image1_sig_meta)
-            img2 = random.choice(sigs_genuine)
-        # generate image pair from different class
-        else:
-            self.img1 = self.rng.choice(self.genuine)
-            image1_filename = os.path.basename(self.img1[1])
-            image1_sig_meta = SigInfo(image1_filename)
-            sigs_forged = self.signatures_forged(image1_sig_meta)
-            if len(sigs_forged) > 0:
-                img2 = random.choice(sigs_forged)
-            else:
-                sigs_exclude = self.signatures_exclude(image1_sig_meta)
-                img2 = random.choice(sigs_exclude)
-
-        img1 = Image.open(self.img1[1]).resize((96, 64))
-        img2 = Image.open(img2[1]).resize((96, 64))
-        img1 = img1.convert('L')
-        img2 = img2.convert('L')
-        img1 = self.transform(img1)
-        img2 = self.transform(img2)
-        return img1, img2
