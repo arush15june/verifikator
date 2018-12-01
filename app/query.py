@@ -6,6 +6,10 @@ from torch.autograd import Variable
 from torchvision import transforms
 from model import SiameseNet
 
+from config import get_config
+
+config, _ = get_config()
+
 class QueryModel():
     """
         Get the confidence score for two PIL images
@@ -23,7 +27,10 @@ class QueryModel():
             - Load model from model_path 
             - Load state to the model
         """
-        self.model = SiameseNet().cuda()
+        model = SiameseNet()
+        if config.use_gpu:
+            model = model.cuda()
+        self.model = model
         self.ckpt = torch.load(model_path)
         self.model.load_state_dict(self.ckpt['model_state'])
 
@@ -67,7 +74,10 @@ class QueryModel():
             Return
                 :param output torch.Tensor: confidence tensor    
         """
-        x0, x1 = Variable(tensor0).cuda(), Variable(tensor1).cuda()
+        x0, x1 = Variable(tensor0), Variable(tensor1)
+        if config.use_gpu:
+            x0 = x0.cuda()
+            x1 = x1.cuda()
         output = self.model(x0, x1)
         output = F.sigmoid(output)
 

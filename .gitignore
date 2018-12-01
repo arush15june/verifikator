@@ -1,5 +1,6 @@
 /.vscode/
 /env/
+/env1/
 /model/dataset/
 /model/ckpt/
 /model/logs/

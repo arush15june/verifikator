@@ -5,6 +5,7 @@ Verifikator API
 """
 
 import sys
+import time
 from io import BytesIO
 
 from flask import Flask, request, make_response, jsonify, Response#, send_from_directory
@@ -14,7 +15,7 @@ from werkzeug.datastructures import FileStorage
 
 from helpers import ModelPredictor
 
-DEFAULT_MODEL_PATH = "../model/ckpt/exp_4/model_ckpt.tar"
+DEFAULT_MODEL_PATH = "../model/model_ckpt.tar"
 DEFAULT_DATASET_DIR = "../model/dataset/"
 DEFAULT_IMAGES_DIR = DEFAULT_DATASET_DIR+"signatures/valid/"
 
@@ -78,9 +79,9 @@ class SigVerify(Resource):
             image.save(image_file)
         except:
             abort(400, message="Invalid Input")
-
+        start = time.time()
         confidence, is_genuine = self.predictor.getConfidence(image_file, cust_id)
-
+        print(time.time() - start)
         data_dict = {
             'confidence': confidence.item(),
             'genuine': is_genuine

@@ -337,14 +337,16 @@ class SignatureDataset(Dataset, SignatureTools):
         
         image1_sig_meta = SigInfo(image1_filename, dataset_type=self.dataset_type)
 
-        label = random.choice([1.0, 0.0])
+        label = 1.0 if np.random.rand() > 0.5 else 0.0
         # get image from same class
         if label:
             sigs_genuine = self.signatures_genuine(image1_sig_meta)
             image2 = random.choice(sigs_genuine)
         # get image from different class
         else:
+            # select_forged = True if np.random.rand() > 0.5 else False
             sigs_forged = self.signatures_forged(image1_sig_meta)
+
             if len(sigs_forged) > 0:
                 image2 = random.choice(sigs_forged)
             else:
