@@ -27,7 +27,7 @@ ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png']
 
 app = Flask(__name__)
 app.config.from_object(__name__)
-cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
+cors = CORS(app, resources={r"/*": {"origins": "*"}})
 
 api = Api(app)
 
@@ -91,7 +91,8 @@ class SigVerify(Resource):
 
         return make_response(jsonify(data_dict))
 
-api.add_resource(SigVerify, "/api/verify/<int:cust_id>")
+api.add_resource(SigVerify, "/invocations")
+api.add_resource(Ping, "/ping")
 
 if __name__ == '__main__':
     app.run(debug=True)

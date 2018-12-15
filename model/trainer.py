@@ -12,7 +12,9 @@ from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm
 from model import SiameseNet
 from utils import AverageMeter, get_num_model
-
+from data_loader import SignatureDataset
+from query import QueryModel
+from torchvision import datasets
 
 class Trainer(object):
     """
@@ -34,6 +36,9 @@ class Trainer(object):
           such as the initial learning rate, the end momentum, and the l2
           regularization strength.
         """
+        images_folder_dataset = datasets.ImageFolder(root='./dataset/signatures/valid')
+        self.test_dataset = SignatureDataset(dataset=images_folder_dataset)
+        
         self.config = config
         self.layer_hyperparams = layer_hyperparams
 
@@ -232,25 +237,56 @@ class Trainer(object):
         # switch to evaluate mode
         self.model.eval()
 
-        correct = 0
-        for i, (x1, x2) in enumerate(self.valid_loader):
-            if self.use_gpu:
-                x1, x2 = x1.cuda(), x2.cuda()
+        query_model = QueryModel('ckpt/exp_12/model_ckpt.tar')
+        query_model.model = self.model
+        
+        total = len(self.test_dataset)
+        tp = 0
+        tn = 0
+        fp = 0
+        fn = 0
+        # for i in range(1, 10):
+        for x1, x2, label in self.test_dataset:
+            x1 = x1.unsqueeze_(0).cuda()
+            x2 = x2.unsqueeze_(0).cuda()
             x1, x2 = Variable(x1, volatile=True), Variable(x2, volatile=True)
 
             batch_size = x1.shape[0]
 
             # compute log probabilities
-            out = self.model(x1, x2)
-            log_probas = F.sigmoid(out)
+            output = query_model.getConfidence(x1, x2)
 
-            # get index of max log prob
-            pred = log_probas.data.max(0)[1][0]
-            if pred == 0:
-                correct += 1
+            if output >= 0.5 and label == 1:
+                tp += 1
+            elif output <= 0.5 and label == 0:
+                tn += 1
+            elif output >= 0.5 and label == 0:
+                fp += 1
+            elif output <= 0.5 and label == 1:
+                fn += 1
 
-        # compute acc and log
-        valid_acc = (100. * correct) / self.num_valid
+        # correct = 0
+        # for i, (x1, x2) in enumerate(self.valid_loader):
+        #     if self.use_gpu:
+        #         x1, x2 = x1.cuda(), x2.cuda()
+        #     x1, x2 = Variable(x1, volatile=True), Variable(x2, volatile=True)
+
+        #     batch_size = x1.shape[0]
+
+        #     # compute log probabilities
+        #     out = self.model(x1, x2)
+        #     log_probas = F.sigmoid(out)
+
+        #     # get index of max log prob
+        #     pred = log_probas.data.max(0)[1][0]
+        #     if pred == 0:
+        #         correct += 1
+
+        # # compute acc and log
+        # valid_acc = (100. * correct) / self.num_valid
+        correct = tp+tn
+        valid_acc = (100. * correct) / total
+
         iter = epoch
         file.write('{},{}\n'.format(
             iter, valid_acc)
@@ -263,6 +299,9 @@ class Trainer(object):
 
         # switch to evaluate mode
         self.model.eval()
+
+        # images_folder_dataset = datasets.ImageFolder(root='./dataset/signatures/valid')
+        # siamese_dataset = SignatureDataset(dataset=images_folder_dataset)
 
         correct = 0
         for i, (x1, x2) in enumerate(self.test_loader):
@@ -282,11 +321,18 @@ class Trainer(object):
                 correct += 1
 
         test_acc = (100. * correct) / self.num_test
+        # test_acc = (100. * correct) / total
         print(
             "[*] Test Acc: {}/{} ({:.2f}%)".format(
                 correct, self.num_test, test_acc
             )
         )
+        
+        # print(
+        #     "[*] Test Acc: {}/{} ({:.2f}%)".format(
+        #         correct, self.num_test, test_acc
+        #     )
+        # )
 
     def temper_momentum(self, epoch):
         """

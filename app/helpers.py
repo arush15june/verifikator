@@ -49,18 +49,18 @@ class ModelPredictor():
         cust_siginfo = SigInfo(cust_siginfo_file)
 
         sigs_genuine = self.queryDataset.signatures_genuine(cust_siginfo)
-        output = 0
+        total_sigs = len(sigs_genuine)
         image = self.getImage(image_file)
-        
+
+        output = 0
         for sig in sigs_genuine:
         # sig = random.choice(sigs_genuine)
             sig = Image.open(sig[1])
 
             confidence = self._predict(sig, image)
-            print(confidence.item())
             output += confidence
 
-        output = output / len(sigs_genuine)
+        output = output / total_sigs
 
         is_genuine = True if confidence > 0.5 else False
 

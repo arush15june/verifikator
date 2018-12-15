@@ -58,7 +58,7 @@ class SiameseNet(nn.Module):
         self.conv2 = nn.Conv2d(64, 128, 7)
         self.conv3 = nn.Conv2d(128, 128, 4)
         self.conv4 = nn.Conv2d(128, 256, 2)
-        self.fc1 = nn.Linear(3072, 4096)
+        self.fc1 = nn.Linear(9216, 4096)
         self.fc2 = nn.Linear(4096, 1)
 
         # self.conv1_bn = nn.BatchNorm2d(64)

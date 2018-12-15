@@ -115,7 +115,9 @@ class SigInfo(object):
         # 00101001.png
         'sample': re.compile(r'(?P<signature>\d{3})(?P<sample>\d{2})(?P<done_by>\d{3}).*'),
         # H-S-2-F-01.tiff
-        'bhsig': re.compile(r'[H|B]-[S]-(?P<signature>\d+)-(?P<genuine>F|G)-(?P<sample>\d+).*')
+        'bhsig': re.compile(r'[H|B]-[S]-(?P<signature>\d+)-(?P<genuine>F|G)-(?P<sample>\d+).*'),
+        # U11025_155.jpg
+        'final_round': re.compile(r'[U](?P<signature>\d+)_(?P<sample>\d+).*')
     }
     
     def __init__(self, signature_filename, *args, **kwargs):
@@ -149,6 +151,11 @@ class SigInfo(object):
             self.dataset_type
         )
 
+    def _set_genuine(self, condition):
+        if condition:
+            self.genuine = True
+            self.forged = False
+
     def _set_cedar(self, signature_filename):
         filename_without_ext = signature_filename[:-4]
         filename_split = filename_without_ext.split('_')
@@ -157,9 +164,7 @@ class SigInfo(object):
         self.signature = filename_split[1]
         self.sample = filename_split[2]
         
-        if genuine:
-            self.genuine = True
-            self.forged = False
+        self._set_genuine(genuine)
 
     def _set_dataset_type(self, signature_filename):
         for dataset_type, pattern in self.DATASET_TYPES.items():
@@ -170,34 +175,33 @@ class SigInfo(object):
                 break
                 
     def _set_sig_metadata(self, matched_pattern):
-        eval('self._{}_set_metadata(matched_pattern)'.format(self.dataset_type))
+        if self.dataset_type in self.DATASET_TYPES:
+            eval('self._{}_set_metadata(matched_pattern)'.format(self.dataset_type))
                 
     def _sample_set_metadata(self, matched_pattern):
         self.signature = int(matched_pattern.group('signature'))
         self.sample = int(matched_pattern.group('sample'))
         self.done_by = int(matched_pattern.group('done_by'))
 
-        if(self.signature == self.done_by):
-            self.genuine = True
-            self.forged = False
+        self._set_genuine(self.signature == self.done_by)
 
     def _cedar_set_metadata(self, matched_pattern):
         self.signature = int(matched_pattern.group('signature'))
         self.sample = int(matched_pattern.group('sample'))
         genuine = True if matched_pattern.group('genuine') == 'original' else False
 
-        if genuine:
-            self.genuine = True
-            self.forged = False
+        self._set_genuine(genuine)
     
     def _bhsig_set_metadata(self, matched_pattern):
         self.signature = int(matched_pattern.group('signature'))
         self.sample = int(matched_pattern.group('sample'))
         genuine = True if matched_pattern.group('genuine') == 'G' else False
         
-        if genuine:
-            self.genuine = True
-            self.forged = False
+        self._set_genuine(genuine)
+
+    def _final_round_set_metadata(self, matched_pattern):
+        self.signature = int(matched_pattern.group('signature'))
+        self.sample = int(matched_pattern.group('sample'))
 
 class SignatureTools(object):
     """
@@ -350,8 +354,8 @@ class SignatureDataset(Dataset, SignatureTools):
                 sigs_exclude = self.signatures_exclude(image1_sig_meta)
                 image2 = random.choice(sigs_exclude)
 
-        image1 = Image.open(image1[1]).resize((96, 64))
-        image2 = Image.open(image2[1]).resize((96, 64))
+        image1 = Image.open(image1[1]).resize((120, 80))
+        image2 = Image.open(image2[1]).resize((120, 80))
         image1 = image1.convert('L')
         image2 = image2.convert('L')
 

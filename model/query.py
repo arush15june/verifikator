@@ -38,7 +38,8 @@ class QueryModel():
             Return
                 :param image PIL.Image: resized image
         """
-        return image.resize((96, 64), Image.ANTIALIAS)
+        return image.resize((120, 80), Image.ANTIALIAS)
+        # return image.resize((96, 64), Image.ANTIALIAS)
     
     def ImageToTensor(self, image):
         """
@@ -53,7 +54,7 @@ class QueryModel():
         """
         image = self.resizeImage(image)
         transform=transforms.Compose([transforms.ToTensor()])
-        return torch.reshape(transform(image), [1, 1, 64, 96])
+        return torch.reshape(transform(image), [1, 1, 80, 120])
 
     def getConfidence(self, tensor0, tensor1):
         """

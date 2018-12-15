@@ -353,8 +353,8 @@ class SignatureDataset(Dataset, SignatureTools):
                 sigs_exclude = self.signatures_exclude(image1_sig_meta)
                 image2 = random.choice(sigs_exclude)
 
-        image1 = Image.open(image1[1]).resize((96, 64))
-        image2 = Image.open(image2[1]).resize((96, 64))
+        image1 = Image.open(image1[1]).resize((120, 80))
+        image2 = Image.open(image2[1]).resize((120, 80))
         image1 = image1.convert('L')
         image2 = image2.convert('L')
 
@@ -413,8 +413,8 @@ class SignatureTest(Dataset, SignatureTools):
                 sigs_exclude = self.signatures_exclude(image1_sig_meta)
                 img2 = random.choice(sigs_exclude)
 
-        img1 = Image.open(self.img1[1]).resize((96, 64))
-        img2 = Image.open(img2[1]).resize((96, 64))
+        img1 = Image.open(self.img1[1]).resize((120, 80))
+        img2 = Image.open(img2[1]).resize((120, 80))
         img1 = img1.convert('L')
         img2 = img2.convert('L')
         img1 = self.transform(img1)
